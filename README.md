@@ -1,2 +1,3 @@
 # pichess
-interface d'echecs dédiée à l'entrainement
+
+Interface d'Echecs dédiée à l'entrainement.
