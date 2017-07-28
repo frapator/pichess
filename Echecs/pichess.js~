@@ -1,0 +1,314 @@
+const GameWidth = 1200;
+var game = new Phaser.Game(GameWidth, 600, Phaser.AUTO, 'echecs', { preload: preload, create: create, render: render });
+//game.stage.disableVisibilityChange = true;
+
+var myBoard = new Board();
+
+var PIECE_WIDTH = 333,
+    PIECE_HEIGHT = 333,
+    BOARD_COLS = 8,
+    BOARD_ROWS = 8,
+	BOARD_WIDTH = 600,
+	BOARD_HEIGHT = 600;
+
+	PIECE_X_SCALE = Math.floor(BOARD_WIDTH / 8) / 333;
+	PIECE_Y_SCALE = Math.floor(BOARD_HEIGHT / 8) / 333;
+
+var THEME_COLORS = ["#4488AA", "#444444", "#AAAAAA"];
+var THEME_INDEX = 0;
+var ThemeButton;
+var BackToStartButton;
+var BackButton;
+var ForwardToEndButton;
+var ForwardButton;
+
+var MUSIC_INDEX = 0;
+var MUSIC_NAMES = [
+	["compo-aribariba", 'assets/audio/compo_aribariba.mp3'], 
+	["oud-01", 'assets/audio/ana_ouenta_louahdina-25novembre04.mp3'],
+	["oud-02", 'assets/audio/el helwadi-02-25novembre04.mp3']];
+	//	en erreur ["bbb-05", 'assets/audio/big-bronsky-blues-05.mp3'],
+var MUSICS = [];
+var MUSIC_LOOP_FLAG = false;
+var MUSIC_MUTE_FLAG = true;
+var MusicButton;
+
+var LOGS = [];
+
+var spritesGroup;
+var WhosTurnDotGraphics;
+var ResultText;
+
+function preload() {
+	game.load.spritesheet("background", "assets/Chess_Pieces_Sprite.svg.png", PIECE_WIDTH, PIECE_HEIGHT);
+	game.load.image("board", "assets/Board_0mGud.png");
+	WhosTurnCircle = new Phaser.Circle(620, 300, 10);
+	game.add.sprite(WhosTurnCircle);
+	
+	for (var pMusicName of MUSIC_NAMES) {
+		game.load.audio(pMusicName[0], pMusicName[1]);
+	}
+}
+
+function TracePresentation() {
+	LOGS = [
+		"07/08 : 3eme refactorisation terminée",
+		"02/08 : Ajout de thèmes et musiques pour voir",
+		"29/07 : Fin phase 4",
+		"28/07 : 2eme refactorisation terminée",
+		"21/07 : Début phase 4",
+		"26/06 : Début du projet",
+		"",		
+		"  0%|D| Design",
+		"100%|C| trouver un nom au projet : PiChess",
+		"        (tests, idées, coaching, planning, ressources ...)",
+		"  0%|B| trouver de l'aide pour aller encore + loin",
+		"-------",
+		"Ensuite",
+		"",
+		"  0%|A| proposer des exos construits à partir des pgn",
+		"  0%|9| détecter les thèmes dans les parties",
+		"  0%|8| Module de lecture des pgn",
+		"  0%|7| Module d'aide tactique visuelle",
+		"  0%|6| Module d'analyse sans calcul",
+		"------------------",
+		"Assistant tactique",
+		"",
+		" 50%|5| Transporteur & affichage des coups",
+		"100%|4| Menu de base : start, save fen, load fen",
+		" 95%|3| Conditions de fin (reste répétition)",
+		" 95%|2| Règles du jeu (reste sous promotion)",
+		"100%|1| Echiquier, pièces, déplacements libres",
+		"-----------------",
+		"Interface de base",
+		"",
+		"Prochaines étapes :",
+		"",
+		"Version en développement alpha (bugguée).",
+		"Analyseur de positions/aide a la tactique",
+		"",
+		"Bonjour"
+	]
+}
+
+function create() {
+	
+	// l'echiquier
+	prepareBoard();
+	CreateWhosTurnIndicator();
+	
+	// menu
+	CreateStartButton();
+	CreateInfosButton();
+	CreateFenInput();
+	CreateThemeButton();
+	CreateMusicSelectButton();
+	CreateMusicMuteButton();
+	CreatePGNButton();
+	
+	// transporteur
+	BackToStartButton = CreateBackToStartButton();
+	BackButton = CreateBackButton();
+	ForwardButton = CreateForwardButton();
+	ForwardToEndButton = CreateForwardToEndButton();
+	
+	// preferences
+   // fond
+   THEME_INDEX = parseInt(localStorage.getItem('BackgroundColorIndex'));
+	if (isNaN(THEME_INDEX)) {
+		THEME_INDEX = 0;
+	}
+	SelectTheme(THEME_INDEX);
+
+	// musique
+	MUSIC_INDEX = parseInt(localStorage.getItem('MusicIndex'));
+	if (MUSIC_INDEX < 0 || 	MUSIC_INDEX >= MUSICS.length) MUSIC_INDEX = 0;
+	MUSIC_LOOP_FLAG = JSON.parse(localStorage.getItem('MusicLoopFlag'));
+	MUSIC_MUTE_FLAG = JSON.parse(localStorage.getItem('MusicMuteFlag'));
+	if (isNaN(MUSIC_INDEX)) {
+		MUSIC_INDEX = 0;
+	}
+
+	// trace configuration locale	
+	for (var i = 0; i < localStorage.length; i++) {
+		var lKey = localStorage.key(i);
+		console.log(lKey + " : " + localStorage.getItem(lKey));
+	}
+	
+	// nouvelle partie
+	StartGame();
+}
+
+function GetBoardLeftCornerPosition() {
+	return new Phaser.Point((GameWidth - BOARD_WIDTH) / 2, 0);
+}
+
+function prepareBoard() {
+	// echiquier
+	var lBoard = game.add.sprite(GetBoardLeftCornerPosition().x, GetBoardLeftCornerPosition().y, "board");
+	lBoard.scale.setTo(BOARD_WIDTH / lBoard.width, BOARD_HEIGHT / lBoard.height);
+}
+
+
+function SelectTheme(pIndex) {
+	ThemeButton.text = "Thème #" + (pIndex + 1); 
+  game.stage.backgroundColor = THEME_COLORS[pIndex];
+  localStorage.setItem('BackgroundColorIndex', pIndex);
+}
+
+
+function PlayMusic(pIndex) {
+	if (! MUSICS[pIndex].isPlaying) {
+		MUSICS[pIndex].play();
+	}
+}
+
+function StopMusic() {
+	if (MUSICS[MUSIC_INDEX].isPlaying) {
+		MUSICS[MUSIC_INDEX].stop();
+	}
+}
+
+function RegisterMusics() {
+	console.log("musics registered");
+	// premiere musique
+	if (MUSIC_INDEX >= 0 && MUSIC_INDEX < MUSIC_NAMES.length) {
+		if (! MUSIC_MUTE_FLAG) {
+			PlayMusic(MUSIC_INDEX);
+		}
+	}
+}
+
+function GetMusicSelectButtonText() {
+	return "Musique #" + (MUSIC_INDEX + 1);
+}
+
+function GetMusicMuteButtonText() {
+	return MUSIC_MUTE_FLAG ? "muted" : "playing";
+}
+
+function NextMusic() {
+	console.log("next music");
+}
+
+function RefreshPGN() {
+	LOGS = [];
+	LOGS.push(myBoard.GetPGN());
+}
+
+function ChessBoardToScreenProjection(pPosition) {
+	var lScreenPosition = new Phaser.Point();
+	lScreenPosition.x = pPosition.x * Math.floor(BOARD_WIDTH / 8) + GetBoardLeftCornerPosition().x;
+	lScreenPosition.y = (7 - pPosition.y) * Math.floor(BOARD_HEIGHT / 8) + GetBoardLeftCornerPosition().y;
+	return lScreenPosition;
+}
+
+function ScreenToChessBoardProjection(pScreenPosition) {
+	var lCorner = GetBoardLeftCornerPosition();
+	var lX = Math.floor((pScreenPosition.x - lCorner.x)/ BOARD_WIDTH * 8);
+	var lY = 7 - Math.floor((pScreenPosition.y - lCorner.y) / BOARD_HEIGHT * 8);
+	var pos = new Position(lX, lY);
+	return pos;
+}
+
+function onDragStart(sprite, pointer) {
+	lPos = new Phaser.Point();
+	lPos.copyFrom(pointer.position);
+
+	OriginalPieceChessBoardPosition = ScreenToChessBoardProjection(lPos);
+	//OriginalPieceChessBoardPosition = lPos;
+	//sprite.tint = Math.random() * 0xffffff;
+	//DebugText = "Orig = " + lPos + " = " + OriginalPieceChessBoardPosition;
+}
+
+function onDragStop(sprite, pointer) {
+	// calculer la case d'arrivée a partir du pointer
+	var lFinalCase = ScreenToChessBoardProjection(pointer.position);
+	var lDraggedPiece = sprite.piece;
+	//console.log("moving " + lDraggedPiece);
+	
+	// si case d'arrivée = case de départ, ce n'est pas un coup
+	if (Position.equals(lFinalCase, OriginalPieceChessBoardPosition)) {
+		//LOGS.push("sur place en " + lFinalCase + " / " + OriginalPieceChessBoardPosition);
+		myBoard.Trace();
+		lDraggedPiece.sprite.position = ChessBoardToScreenProjection(OriginalPieceChessBoardPosition);
+		lDraggedPiece.sprite.piece.Trace();		
+		return;
+	}
+
+	// vérification coup légal
+	var lMoveErrorCode = myBoard.CheckMove(lDraggedPiece, lFinalCase, true);
+	//LOGS.push("move to " + lFinalCase + " : " + lMoveErrorCode.desc);
+
+	// si ok : déplacer pour de bon
+	if (lMoveErrorCode != MOVE_ERROR_CODE.NO_ERROR) {
+		// retour case départ : on centralise la piece sur sa case
+		lDraggedPiece.sprite.position = ChessBoardToScreenProjection(OriginalPieceChessBoardPosition);
+		
+	} else {
+		//LOGS.push("move to " + lFinalCase);
+		//console.log("moving " + lDraggedPiece);
+		myBoard.MovePiece(lDraggedPiece, lFinalCase, true);
+		
+		//after every move check if puzzle is completed
+		if (myBoard.checkIfFinished()) {
+			//LOGS.push("finished");
+			return;
+		}
+		
+		// changer de joueur
+		myBoard.TurnIndex ++;
+		myBoard.SwitchTurn();
+	}
+}
+
+function CreateWhosTurnIndicator() {
+	// les points pour indiquer le joueur actif
+	WhosTurnDotGraphics = game.add.graphics(0, 0);
+	WhosTurnDotGraphics.beginFill(0xFFFFFF, 1);
+	WhosTurnDotGraphics.drawCircle(BOARD_WIDTH + GetBoardLeftCornerPosition().x + 20, 0, 10);
+}
+
+function ShowWhosTurn(pColor) {
+	if (pColor == COLOR_ENUM.BLANC) {
+		WhosTurnDotGraphics.tint = 0xFFFFFF;
+		WhosTurnDotGraphics.y = BOARD_HEIGHT - 20;
+	} else {
+		WhosTurnDotGraphics.tint = 0x000000;
+		WhosTurnDotGraphics.y = 20;
+	}
+
+}
+
+function showFinishedText(pText) {
+
+    var style = { font: "40px Arial", fill: "#000", align: "center"};
+
+    ResultText = game.add.text(game.world.centerX, game.world.centerY, pText, style);
+
+    ResultText.anchor.set(0.5);
+
+}
+
+function clearFinishedText() {
+	if (ResultText) {
+		ResultText.destroy();
+	}
+}
+
+function StartGame() {
+	console.log("new game");
+	
+	myBoard.StartGame();
+	
+	clearFinishedText();
+}
+
+function render() {
+	
+	var ly = 0;
+	for (i=LOGS.length-1; i>= 0; i--) {
+		ly += 15;
+	    if (ly < 800) game.debug.text(LOGS[i], 0, ly);
+	}
+}
